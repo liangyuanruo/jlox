@@ -1,6 +1,7 @@
 package com.craftinginterpreters.lox;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import static com.craftinginterpreters.lox.TokenType.*;
 
@@ -37,12 +38,55 @@ public class Parser {
     }
 
     private Stmt statement() {
+        if (match(FOR)) return forStatement();
         if (match(IF)) return ifStatement();
         if (match(PRINT)) return printStatement();
         if (match(WHILE)) return whileStatement();
         if (match(LEFT_BRACE)) return new Stmt.Block(block());
 
         return expressionStatement();
+    }
+
+    private Stmt forStatement() {
+        consume(LEFT_PAREN, "Expect '(' after 'for'.");
+
+        Stmt initializer;
+        if (match(SEMICOLON)) {
+            initializer = null; // initializer is optional
+        } else if (match(VAR)) {
+            initializer = varDeclaration();
+        } else {
+            initializer = expressionStatement(); // initializer can be an expression
+        }
+
+        Expr condition = null;
+        if (!check(SEMICOLON)) { // condition is optional, can be an infinite loop
+            condition = expression();
+        }
+        consume(SEMICOLON, "Expect ';' after loop condition.");
+
+        Expr increment = null;
+        if(!check(RIGHT_PAREN)) { // increment clause is optional too
+            increment = expression();
+        }
+        consume(RIGHT_PAREN, "Expect ')' after for clauses");
+
+        Stmt body = statement(); // statement follows from the if-clause
+        // for-loops are just while-loops with syntactic sugar - following code converts the former to the latter
+        if (increment != null) {
+            body = new Stmt.Block( // append increment operation to the end of the body
+                    Arrays.asList(body, new Stmt.Expression(increment))
+            );
+        }
+        // omitting the condition clause means the for loop runs infinitely
+        if (condition == null) condition = new Expr.Literal(true);
+        body = new Stmt.While(condition, body);
+        // initialized variable lives outside the while-loop
+        if (initializer != null) {
+            body = new Stmt.Block(Arrays.asList(initializer, body));
+        }
+
+        return body;
     }
 
     private Stmt ifStatement() {
